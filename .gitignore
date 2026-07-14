@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ============================================================
+# Peak-End Net project-specific (training outputs & dev artifacts)
+# ============================================================
+output_stage1/
+output_stage1_old_backup/
+output_stage2/
+output_stage2_old_backup/
+smoke_test_stage1.py
