@@ -1,11 +1,11 @@
-# Peak-End Net
+# 🎬 Peak-End Net
 
 **Peak-End-Net: A Peak-End Rule Inspired Framework for Generalizable Video Aesthetic Assessment**
 
 **Accepted to ACM Multimedia 2026**
 
-[Paper](https://arxiv.org/abs/2607.13941) ·
-[Pretrained Model](https://huggingface.co/GD-ML/Peak-End-Net/tree/main)
+[📄 Paper](https://arxiv.org/abs/2607.13941) ·
+[🤗 Peak-End-Net](https://huggingface.co/GD-ML/Peak-End-Net/tree/main)
 
 Peak-End Net is a video aesthetic assessment framework inspired by the
 **peak-end rule**: people tend to judge an experience disproportionately by its
@@ -14,7 +14,7 @@ entire experience. Peak-End Net translates this insight into a learnable
 temporal model that predicts an overall aesthetic score together with ten
 fine-grained attribute scores.
 
-## Overview
+## ✨ Overview
 
 ![Peak-End Net pipeline](pipeline.png)
 
@@ -33,14 +33,14 @@ The framework contains five main components:
 - **Gated Fusion** — a lightweight second-stage module adaptively combines the
   learned video-level score with the mean frame-level AVA score.
 
-## Installation
+## 🛠️ Installation
 
 ### Requirements
 
 - Python 3.10 or later
 - A recent PyTorch and torchvision build compatible with your CUDA environment
-- A CUDA-capable GPU is recommended for inference and training; AVA head
-  pretraining uses NCCL-based distributed training
+- A CUDA-capable GPU is recommended; multi-GPU training requires Linux with
+  CUDA and NCCL. CPU inference is supported but slower
 
 Clone the repository and create an isolated environment:
 
@@ -52,16 +52,15 @@ conda create -n peak-end-net python=3.10 -y
 conda activate peak-end-net
 ```
 
-Install a [PyTorch build](https://pytorch.org/get-started/locally/) compatible
-with your CUDA environment, followed by the remaining dependencies:
+Install a matching PyTorch and torchvision build for your CUDA environment by
+following the [official instructions](https://pytorch.org/get-started/locally/).
+Then install the project dependencies:
 
 ```bash
-pip install numpy pandas scipy scikit-learn opencv-python pillow tqdm \
-    requests ftfy regex
-pip install git+https://github.com/openai/CLIP.git
+pip install -r requirements.txt
 ```
 
-## Pretrained Model and Inference
+## 🚀 Pretrained Model and Inference
 
 The self-contained [`Peak-End-Net.pth`](https://huggingface.co/GD-ML/Peak-End-Net/tree/main)
 checkpoint includes the CLIP ViT-L/14 encoder, AVA aesthetic head, Peak-End
@@ -71,7 +70,6 @@ required for inference.
 Download the checkpoint:
 
 ```bash
-pip install -U huggingface_hub
 hf download GD-ML/Peak-End-Net Peak-End-Net.pth --local-dir ./checkpoints
 ```
 
@@ -86,7 +84,7 @@ python inference.py \
 The script reports the overall score, ten attribute scores, the fusion gate,
 and the two scores combined by the gate.
 
-## Data Preparation
+## 📁 Data Preparation
 
 ### Annotation files
 
@@ -133,7 +131,7 @@ Pass the cache directory to either training stage with:
 --extracted_frames_dir ./data/extracted_frames
 ```
 
-## Training
+## 🏋️ Training
 
 Training consists of three steps: pretrain the frame-level AVA aesthetic head,
 train Peak-End Net, and finally train the gated-fusion module.
@@ -232,7 +230,7 @@ contains the trainable fusion weights only. It is a training checkpoint and
 cannot be passed directly to `inference.py`; inference expects the released
 self-contained checkpoint from Hugging Face.
 
-## Citation
+## 📖 Citation
 
 If you find this work useful, please cite:
 
@@ -248,11 +246,11 @@ If you find this work useful, please cite:
 }
 ```
 
-## Acknowledgments
+## 🤝 Acknowledgments
 
 This project builds on [CLIP](https://github.com/openai/CLIP) and
 [CLIP4Clip](https://github.com/ArrowLuo/CLIP4Clip).
 
-## License
+## 📄 License
 
 This project is released under the [MIT License](LICENSE).

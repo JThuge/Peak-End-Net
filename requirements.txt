@@ -1,0 +1,25 @@
+# Deep learning
+torch>=1.13.0
+torchvision>=0.14.0
+
+# Scientific computing and evaluation
+numpy>=1.23.0
+pandas>=1.5.0
+scipy>=1.9.0
+scikit-learn>=1.1.0
+
+# Image and video processing
+opencv-python>=4.6.0
+Pillow>=9.2.0
+
+# Utilities
+ftfy>=6.1.1
+regex>=2022.10.31
+requests>=2.28.0
+tqdm>=4.64.0
+
+# Hugging Face checkpoint-download CLI (`hf download`)
+huggingface-hub>=0.34.0
+
+# OpenAI CLIP (required by AVA aesthetic-head pretraining)
+git+https://github.com/openai/CLIP.git
