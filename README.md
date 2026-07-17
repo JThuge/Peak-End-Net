@@ -1,65 +1,156 @@
 # Peak-End Net
 
-**[ACM MM 2026] Peak-End Net: A Peak-End Rule Inspired Framework for Generalizable Video Aesthetic Assessment**
+**Peak-End-Net: A Peak-End Rule Inspired Framework for Generalizable Video Aesthetic Assessment**
+
+**Accepted to ACM Multimedia 2026**
+
+[Paper](https://arxiv.org/abs/2607.13941) ·
+[Pretrained Model](https://huggingface.co/GD-ML/Peak-End-Net/tree/main)
+
+Peak-End Net is a video aesthetic assessment framework inspired by the
+**peak-end rule**: people tend to judge an experience disproportionately by its
+most salient moments and its ending, rather than by uniformly averaging the
+entire experience. Peak-End Net translates this insight into a learnable
+temporal model that predicts an overall aesthetic score together with ten
+fine-grained attribute scores.
 
 ## Overview
 
-Peak-End Net is a video aesthetic assessment framework inspired by the **Peak-End Rule** from psychology, which posits that humans judge an experience based on its most intense moment (peak) and its ending, rather than the average of the entire experience.
+![Peak-End Net pipeline](pipeline.png)
 
-### Architecture
+The framework contains five main components:
 
-![Pipeline](pipeline.png)
-
-### Key Components
-
-- **Frame Aesthetic Perceiver**: Predicts 10-class aesthetic distributions per frame and discovers key moments (peak, valley, end) via attention-weighted scoring.
-- **Peak-End Aggregation**: Three-channel non-uniform temporal aggregation — peak channel (top-k moments), contrast channel (peak-to-valley contrast), and end channel (recency-weighted ending).
-- **Rhythm Encoder**: Multi-scale 1D CNN (kernel sizes 3, 5, 7) capturing temporal aesthetic rhythm patterns.
+- **Frame Aesthetic Perceiver** — a frozen CLIP ViT-L/14 encoder and an
+  AVA-pretrained aesthetic head produce a 10-bin score distribution and an
+  expected aesthetic score for each frame.
+- **Key Moment Discovery** — learnable peak-, valley-, and end-aware signals
+  are combined into a unified temporal attention distribution.
+- **Peak-End Aggregation** — attention-weighted pooling summarizes the frame
+  features into a video-level representation.
+- **Rhythm Encoder** — a multi-scale 1D CNN with kernel sizes 3, 5, and 7
+  captures local fluctuations and longer-range trends in the frame-score
+  sequence.
+- **Gated Fusion** — a lightweight second-stage module adaptively combines the
+  learned video-level score with the mean frame-level AVA score.
 
 ## Installation
 
+### Requirements
+
+- Python 3.10 or later
+- A recent PyTorch and torchvision build compatible with your CUDA environment
+- A CUDA-capable GPU is recommended for inference and training; AVA head
+  pretraining uses NCCL-based distributed training
+
+Clone the repository and create an isolated environment:
+
 ```bash
-# Clone the repository
 git clone https://github.com/AMAP-ML/Peak-End-Net.git
 cd Peak-End-Net
 
-# Install dependencies
-pip install -r requirements.txt
+conda create -n peak-end-net python=3.10 -y
+conda activate peak-end-net
 ```
 
-### Requirements
+Install a [PyTorch build](https://pytorch.org/get-started/locally/) compatible
+with your CUDA environment, followed by the remaining dependencies:
 
-- Python >= 3.8
-- PyTorch >= 1.12.0
-- CUDA-compatible GPU(s)
+```bash
+pip install numpy pandas scipy scikit-learn opencv-python pillow tqdm \
+    requests ftfy regex
+pip install git+https://github.com/openai/CLIP.git
+```
+
+## Pretrained Model and Inference
+
+The self-contained [`Peak-End-Net.pth`](https://huggingface.co/GD-ML/Peak-End-Net/tree/main)
+checkpoint includes the CLIP ViT-L/14 encoder, AVA aesthetic head, Peak-End
+modules, and gated-fusion module. No separate AVA or Stage 1 checkpoint is
+required for inference.
+
+Download the checkpoint:
+
+```bash
+pip install -U huggingface_hub
+hf download GD-ML/Peak-End-Net Peak-End-Net.pth --local-dir ./checkpoints
+```
+
+Run inference on a video:
+
+```bash
+python inference.py \
+    --checkpoint ./checkpoints/Peak-End-Net.pth \
+    --video /path/to/video.mp4
+```
+
+The script reports the overall score, ten attribute scores, the fusion gate,
+and the two scores combined by the gate.
 
 ## Data Preparation
 
-### 1. Extract Video Frames (Optional)
+### Annotation files
 
-Pre-extract frames for faster training (optional, implement as needed).
+Both the training and validation CSV files must contain a `video_id` column and
+the following 11 score columns:
 
-### 2. Prepare Data Files
-
-- **train_csv**: CSV file with training video paths and aesthetic scores (11 columns: overall + 6 general + 4 human)
-- **val_csv**: CSV file with validation video paths and aesthetic scores
-- **video_paths_json**: JSON mapping video IDs to file paths
-
-## AVA Aesthetic Head Pretraining
-
-Peak-End Net uses a **frozen CLIP ViT-L/14 image aesthetic head** (trained on the [AVA dataset](https://github.com/mtobeiyf/ava_downloader)) as its per-frame aesthetic perceiver. This head is trained **first**; the resulting `best_model.pth` is then passed to the main training via `--ava_checkpoint_path`.
-
-### AVA Data Format
-
-A space-separated label file (`AVA.txt`) where each row is:
-
-```
-index image_id count_1 count_2 ... count_10 [extra columns...]
+```text
+score, composition, shotsize, lighting, visualtone, color, depthoffield,
+expression, movement, costume, makeup
 ```
 
-`count_i` is the number of votes for aesthetic score `i` (1-10). Images are stored as `{image_id}.jpg` under `--img_dir`.
+An optional `label` column identifies samples with human-centric annotations.
+Rows whose label contains `Character` contribute to the loss for
+`expression`, `movement`, `costume`, and `makeup`; without this column, those
+four attributes are not supervised.
 
-### Train the AVA Head (Multi-GPU DDP)
+The video-path JSON file maps each `video_id` to its source video:
+
+```json
+{
+  "video_001": "/path/to/videos/video_001.mp4",
+  "video_002": "/path/to/videos/video_002.mp4"
+}
+```
+
+The JSON keys must match the `video_id` values in both CSV files.
+
+### Optional frame extraction
+
+Training can decode videos on the fly. For faster data loading, pre-extract and
+cache the sampled frames as `.npz` files:
+
+```bash
+python scripts/extract_frames.py \
+    --video_paths_json /path/to/video_paths.json \
+    --output_dir ./data/extracted_frames \
+    --max_frames 12 \
+    --num_workers 16
+```
+
+Pass the cache directory to either training stage with:
+
+```bash
+--extracted_frames_dir ./data/extracted_frames
+```
+
+## Training
+
+Training consists of three steps: pretrain the frame-level AVA aesthetic head,
+train Peak-End Net, and finally train the gated-fusion module.
+
+### 1. Pretrain the AVA aesthetic head
+
+The [AVA dataset](https://github.com/mtobeiyf/ava_downloader) label file is
+space-separated, with one row per image:
+
+```text
+index image_id count_1 count_2 ... count_10 [extra columns ...]
+```
+
+Here, `count_i` is the number of votes for aesthetic score `i` (1–10). Store
+each image as `{image_id}.jpg` under `--img_dir`.
+
+The pretraining script uses multi-GPU distributed data parallelism:
 
 ```bash
 torchrun --nproc_per_node=8 ava_pretrain/train_ava_model.py \
@@ -72,18 +163,16 @@ torchrun --nproc_per_node=8 ava_pretrain/train_ava_model.py \
     --save_dir ./checkpoints
 ```
 
-The CLIP backbone is frozen; only the 10-class distribution head is trained with an Earth Mover's Distance (EMD) loss. The best checkpoint (by validation SROCC) is saved to `./checkpoints/best_model.pth` and later reused as the frozen frame scorer in Peak-End Net.
+The CLIP backbone remains frozen while the 10-bin aesthetic distribution head
+is optimized with Earth Mover's Distance loss. The checkpoint with the highest
+validation SROCC is saved to `./checkpoints/best_model.pth`.
 
-## Training
+### 2. Train Stage 1: Peak-End Net
 
-Peak-End Net is trained in **two stages**:
+Stage 1 freezes the CLIP encoder and AVA aesthetic head, then trains Key Moment
+Discovery, Peak-End Aggregation, the Rhythm Encoder, and the Scoring Network.
 
-1. **Stage 1** — train the Peak-End modules (Key Moment Discovery, Peak-End Aggregation, Rhythm Encoder, Scoring Network) with the CLIP encoder and the AVA head frozen.
-2. **Stage 2** — freeze all Stage-1 parameters and train only the lightweight Gated Fusion module, which adaptively balances the Stage-1 model score (`S_model`) and the average frame-level AVA score (`S_static`).
-
-### Stage 1: Peak-End Net
-
-#### Single GPU
+Single-GPU training:
 
 ```bash
 python train.py \
@@ -91,14 +180,14 @@ python train.py \
     --val_csv /path/to/val.csv \
     --video_paths_json /path/to/video_paths.json \
     --ava_checkpoint_path ./checkpoints/best_model.pth \
-    --output_dir ./output \
+    --output_dir ./output_stage1 \
     --epochs 30 \
     --lr 1e-3 \
     --batch_size_train 16 \
     --batch_size_val 8
 ```
 
-#### Multi-GPU (DDP)
+Multi-GPU training:
 
 ```bash
 torchrun --nproc_per_node=4 train.py \
@@ -106,20 +195,24 @@ torchrun --nproc_per_node=4 train.py \
     --val_csv /path/to/val.csv \
     --video_paths_json /path/to/video_paths.json \
     --ava_checkpoint_path ./checkpoints/best_model.pth \
-    --output_dir ./output \
+    --output_dir ./output_stage1 \
     --epochs 30 \
     --lr 1e-3 \
-    --batch_size_train 64 \
-    --batch_size_val 32
+    --batch_size_train 16 \
+    --batch_size_val 8
 ```
 
-### Stage 2: Gated Fusion
+In distributed training, the batch-size arguments are applied per GPU. The
+best Stage 1 checkpoint is saved as `./output_stage1/peakaes_v4_best.pth`.
 
-Uses a trained Stage-1 checkpoint (`--stage1_checkpoint`) as the frozen base and trains only the gated fusion module:
+### 3. Train Stage 2: Gated Fusion
+
+Stage 2 freezes the complete Stage 1 model and trains only the lightweight
+gated-fusion module:
 
 ```bash
 torchrun --nproc_per_node=4 train_stage2.py \
-    --stage1_checkpoint ./output/peakaes_stage1_best.pth \
+    --stage1_checkpoint ./output_stage1/peakaes_v4_best.pth \
     --ava_checkpoint_path ./checkpoints/best_model.pth \
     --train_csv /path/to/train.csv \
     --val_csv /path/to/val.csv \
@@ -133,46 +226,33 @@ torchrun --nproc_per_node=4 train_stage2.py \
     --batch_size_val 32
 ```
 
-The best checkpoint is saved as `stage2_best.pth` (trainable fusion weights only).
-
-## Pretrained Model
-
-The pretrained Peak-End Net checkpoint is available on Hugging Face:
-
-**[GD-ML/Peak-End-Net](https://huggingface.co/GD-ML/Peak-End-Net/tree/main)**
-
-`Peak-End-Net.pth` is a self-contained checkpoint that includes the full model weights (CLIP ViT-L/14 encoder, AVA aesthetic head, Peak-End modules, and the gated fusion module).
-
-```bash
-# Download via huggingface_hub
-huggingface-cli download GD-ML/Peak-End-Net Peak-End-Net.pth --local-dir ./checkpoints
-```
-
-## Inference
-
-Run inference on a single video with the self-contained checkpoint (no external AVA / Stage-1 files needed):
-
-```bash
-python inference.py \
-    --checkpoint ./checkpoints/Peak-End-Net.pth \
-    --video /path/to/video.mp4
-```
-
+For single-GPU training, replace `torchrun --nproc_per_node=4` with `python`.
+The best fusion checkpoint is saved as `./output_stage2/stage2_best.pth` and
+contains the trainable fusion weights only. It is a training checkpoint and
+cannot be passed directly to `inference.py`; inference expects the released
+self-contained checkpoint from Hugging Face.
 
 ## Citation
 
 If you find this work useful, please cite:
 
 ```bibtex
-@inproceedings{peak_end_net_2026,
-  title={Peak-End Net: A Peak-End Rule Inspired Framework for Generalizable Video Aesthetic Assessment},
-  author={Li, Geng and Li, Haiwen and Chen, Rui and Tang, Jing and Sun, Lei and Chu, Xiangxiang},
-  booktitle={ACM International Conference on Multimedia (ACM MM)},
-  year={2026}
+@misc{li2026peakendnetpeakendruleinspired,
+      title={Peak-End-Net: A Peak-End Rule Inspired Framework for Generalizable Video Aesthetic Assessment},
+      author={Geng Li and Haiwen Li and Rui Chen and Jing Tang and Lei Sun and Xiangxiang Chu},
+      year={2026},
+      eprint={2607.13941},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2607.13941},
 }
 ```
 
 ## Acknowledgments
 
-- [CLIP](https://github.com/openai/CLIP) by OpenAI
-- [CLIP4Clip](https://github.com/ArrowLuo/CLIP4Clip) for the video-text encoder backbone
+This project builds on [CLIP](https://github.com/openai/CLIP) and
+[CLIP4Clip](https://github.com/ArrowLuo/CLIP4Clip).
+
+## License
+
+This project is released under the [MIT License](LICENSE).
