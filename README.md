@@ -86,6 +86,9 @@ and the two scores combined by the gate.
 
 ## 📁 Data Preparation
 
+The train/test ID splits used for the VADB and DIVIDE benchmarks are provided
+under [`splits/`](splits/).
+
 ### Annotation files
 
 Both the training and validation CSV files must contain a `video_id` column and
