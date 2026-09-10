@@ -233,6 +233,19 @@ contains the trainable fusion weights only. It is a training checkpoint and
 cannot be passed directly to `inference.py`; inference expects the released
 self-contained checkpoint from Hugging Face.
 
+## 📝 Note on Evaluation Metrics
+
+The validation metric on the VADB dataset reported in the paper was incorrectly
+labeled as RMSE. The values were actually computed using **MSE** (Mean Squared
+Error), as implemented in this repository (`mean_squared_error` in
+`train.py`). MSE is used consistently as both the training loss and the
+validation metric on VADB's official train/test split, making it a natural
+choice for model selection and evaluation. The reported numerical values are
+correct; only the metric name was mislabeled. The primary evaluation metrics
+of this work are PLCC, SROCC, and KRCC, which remain unchanged. We will update
+the arXiv version and request a correction/erratum for the published
+proceedings.
+
 ## 📖 Citation
 
 If you find this work useful, please cite:
